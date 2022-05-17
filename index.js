@@ -1,13 +1,18 @@
 import express from 'express'
 import { collection, doc, addDoc, getDocs, deleteDoc, getDoc, setDoc } from "firebase/firestore";
 import bodyParser from 'body-parser'
-import { getStorage, ref, deleteObject } from "firebase/storage";
+import { getStorage, ref, deleteObject, uploadString, getDownloadURL } from "firebase/storage";
 import { db } from './firebase.js'
 import { getAuth, onAuthStateChanged } from "firebase/auth";
+import crypto from 'crypto'
+import cors from 'cors'
+import { storage } from './firebase.js';
 const app = express()
 app.use(express.json())
 app.use(bodyParser.urlencoded({ extended: true }))
-const port = 3000
+const port = 8080;
+app.use(cors())
+
 const errorHandler = (fn) => {
     return async (req, res, next) => {
         try {
@@ -37,12 +42,28 @@ app.get('/', errorHandler(async (req, res) => {
     });
     res.status(200).send(arr)
 }))
-app.post('/', isAuthenticated, errorHandler(async (req, res) => {
+app.post('/', errorHandler(async (req, res) => {
     const data = req.body
-    console.log(data);
-    const docRef = await addDoc(collection(db, "products"), req.body);
+    const { img } = req.body.body
+    for(let i=0; i<img.length; i++){
+        
+    }
+    const id = crypto.randomBytes(16).toString("hex");
+    const fixedbase64 = img.split(/,(.+)/)[1]
+    const storageRef = ref(storage, id);
+    uploadString(storageRef, fixedbase64, 'base64').then((snapshot) => {
+        console.log('Uploaded a base64 string!');
+    });
+    const url = await getDownloadURL(storageRef)
+    // console.log(req.body.body.title);
+    // const tempObj = {...req.body.body, title: ""}
+    const docRef = await addDoc(collection(db, "products"), {
+        image: url,
+        ...req.body.body
+    });
     res.status(201).send({
         id: docRef.id,
+        image: url,
         ...data
     });
 }))
