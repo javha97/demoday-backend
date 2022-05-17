@@ -45,25 +45,25 @@ app.get('/', errorHandler(async (req, res) => {
 app.post('/', errorHandler(async (req, res) => {
     const data = req.body
     const { img } = req.body.body
-    for(let i=0; i<img.length; i++){
-        
+    let arr = []
+    for (let i = 0; i < img.length; i++) {
+        const id = crypto.randomBytes(16).toString("hex");
+        const fixedbase64 = img[i].split(/,(.+)/)[1]
+        const storageRef = ref(storage, id);
+        uploadString(storageRef, fixedbase64, 'base64').then((snapshot) => {
+            console.log('Uploaded a base64 string!');
+        });
+        const url = await getDownloadURL(storageRef)
+        arr.push(url)
     }
-    const id = crypto.randomBytes(16).toString("hex");
-    const fixedbase64 = img.split(/,(.+)/)[1]
-    const storageRef = ref(storage, id);
-    uploadString(storageRef, fixedbase64, 'base64').then((snapshot) => {
-        console.log('Uploaded a base64 string!');
-    });
-    const url = await getDownloadURL(storageRef)
-    // console.log(req.body.body.title);
     // const tempObj = {...req.body.body, title: ""}
     const docRef = await addDoc(collection(db, "products"), {
-        image: url,
+        image: arr,
         ...req.body.body
     });
     res.status(201).send({
         id: docRef.id,
-        image: url,
+        image: arr,
         ...data
     });
 }))
