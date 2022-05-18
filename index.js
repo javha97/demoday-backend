@@ -3,37 +3,16 @@ import { collection, doc, addDoc, getDocs, deleteDoc, getDoc, setDoc } from "fir
 import bodyParser from 'body-parser'
 import { getStorage, ref, deleteObject, uploadString, getDownloadURL } from "firebase/storage";
 import { db } from './firebase.js'
-import { getAuth, onAuthStateChanged } from "firebase/auth";
 import crypto from 'crypto'
 import cors from 'cors'
 import { storage } from './firebase.js';
+import { isAuthenticated, errorHandler } from './helperFunctions.js';
 const app = express()
 app.use(express.json())
 app.use(bodyParser.urlencoded({ extended: true }))
 const port = 8080;
 app.use(cors())
-
-const errorHandler = (fn) => {
-    return async (req, res, next) => {
-        try {
-            return await fn(req, res, next)
-        } catch (e) {
-            next()
-        }
-    }
-}
-const isAuthenticated = async (req, res, next) => {
-    const auth = getAuth();
-    onAuthStateChanged(auth, (user) => {
-        if (user) {
-            console.log(user);
-            next()
-        } else {
-            return res.send('lmao')
-        }
-    });
-
-}
+//// get all products
 app.get('/', errorHandler(async (req, res) => {
     const docs = await getDocs(collection(db, "products"));
     let arr = []
@@ -42,54 +21,94 @@ app.get('/', errorHandler(async (req, res) => {
     });
     res.status(200).send(arr)
 }))
-app.post('/', errorHandler(async (req, res) => {
-    const data = req.body
-    const { img } = req.body.body
-    let arr = []
-    for (let i = 0; i < img.length; i++) {
-        const id = crypto.randomBytes(16).toString("hex");
-        const fixedbase64 = img[i].split(/,(.+)/)[1]
-        const storageRef = ref(storage, id);
-        uploadString(storageRef, fixedbase64, 'base64').then((snapshot) => {
-            console.log('Uploaded a base64 string!');
+    ////create product
+    .post('/', isAuthenticated, errorHandler(async (req, res) => {
+        const data = req.body
+        const { img } = req.body.body
+        const array = img.split(',')
+        let arr = []
+        for (let i = 0; i < array.length; i++) {
+            const id = crypto.randomBytes(16).toString("hex");
+            // const fixedbase64 = array[i].split(/,(.+)/)[1]
+            const storageRef = ref(storage, id);
+            await uploadString(storageRef, array[i], 'base64')
+            const url = await getDownloadURL(storageRef)
+            arr.push({ imgName: id, imgUrl: url })
+        }
+        const docRef = await addDoc(collection(db, "products"), {
+            ...req.body.body,
+            img: arr
         });
-        const url = await getDownloadURL(storageRef)
-        arr.push(url)
-    }
-    // const tempObj = {...req.body.body, title: ""}
-    const docRef = await addDoc(collection(db, "products"), {
-        image: arr,
-        ...req.body.body
-    });
-    res.status(201).send({
-        id: docRef.id,
-        image: arr,
-        ...data
-    });
-}))
-app.delete('/', isAuthenticated, errorHandler(async (req, res) => {
-    const { id, imgUrl } = req.query
-    await deleteDoc(doc(db, "products", id))
-    if (imgUrl) {
-        const storage = getStorage();
-        const desertRef = ref(storage, `images/${imgUrl}.jpg`);
-        deleteObject(desertRef).then(() => {
-            return res.send('deleted')
-        }).catch((error) => {
-            return res.send('failed to delete')
+        res.status(201).send({
+            ...data.body,
+            id: docRef.id,
+            img: arr
         });
-    }
-    res.send("deleted")
-}))
-app.patch('/', isAuthenticated, errorHandler(async (req, res) => {
-    const data = req.body
-    await setDoc(doc(db, "products", req.body.id), data, { merge: true })
-    const editedDoc = await getDoc(doc(db, "products", req.body.id))
-    res.status(200).send({
-        id: editedDoc.id,
-        ...editedDoc.data()
-    })
-}))
+    }))
+    //// delete product
+    .delete('/:id', isAuthenticated, errorHandler(async (req, res) => {
+        const id = req.params.id
+        const mydoc = await getDoc(doc(db, "products", id))
+        if (mydoc.exists()) {
+            console.log("Document data:", mydoc.data().img);
+            mydoc.data().img.map((el) => {
+                const storage = getStorage();
+                const desertRef = ref(storage, `${el.imgName}`);
+                (async () => {
+                    try {
+                        await deleteObject(desertRef)
+                    } catch (e) {
+                        console.log(e);
+                    }
+                })()
+            })
+        }
+        await deleteDoc(doc(db, "products", id))
+        res.status(200).send('deleted successfully')
+    }))
+    ////update product
+    .patch('/:id', isAuthenticated, errorHandler(async (req, res) => {
+        const { images, title, description } = req.body
+        const id = req.params.id
+        if (images !== undefined) {
+            const myArr = JSON.parse(images);
+            myArr.map(async (el) => {
+                const storageRef = ref(storage, el.imgName);
+                await uploadString(storageRef, imgUrl, 'base64')
+                const url = await getDownloadURL(storageRef)
+                const mydoc = await getDoc(doc(db, "products", id))
+                mydoc.data().img.map((element) => {
+                    if (element.imgName === el.imgName) {
+                        element.imgUrl = url
+                    }
+                })
+            })
+        }
+        if (title !== undefined) {
+            await setDoc(doc(db, "products", id), {
+                title: title,
+            }, { merge: true })
+        }
+        if (description !== undefined) {
+            await setDoc(doc(db, "products", id), {
+                description: description,
+            }, { merge: true })
+        }
+        const editedDoc = await getDoc(doc(db, "products", id))
+        res.status(200).send({
+            id: editedDoc.id,
+            ...editedDoc.data()
+        })
+    }))
+    ////specific product detail
+    .get('/:id', isAuthenticated, errorHandler(async (req, res) => {
+        const id = req.params.id
+        const docs = await getDoc(doc(db, "products", id));
+        res.status(200).send({
+            id: docs.id,
+            ...docs.data()
+        })
+    }))
 app.listen(port, () => {
     console.log(`app listening on port ${port}`)
 })
