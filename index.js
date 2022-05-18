@@ -8,8 +8,9 @@ import cors from 'cors'
 import { storage } from './firebase.js';
 import { isAuthenticated, errorHandler } from './helperFunctions.js';
 const app = express()
+app.use(bodyParser.json({limit: "50mb"}));
+app.use(bodyParser.urlencoded({limit: "50mb", extended: true, parameterLimit:50000}))
 app.use(express.json())
-app.use(bodyParser.urlencoded({ extended: true }))
 const port = 8080;
 app.use(cors())
 //// get all products
@@ -22,9 +23,10 @@ app.get('/', errorHandler(async (req, res) => {
     res.status(200).send(arr)
 }))
     ////create product
-    .post('/', isAuthenticated, errorHandler(async (req, res) => {
+    .post('/', errorHandler(async (req, res) => {
         const data = req.body
         const { img } = req.body.body
+        console.log(img);
         const array = img.split(',')
         let arr = []
         for (let i = 0; i < array.length; i++) {
