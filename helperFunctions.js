@@ -13,6 +13,6 @@ export const isAuthenticated = async (req, res, next) => {
     if (user === adminToken) {
         next()
     } else {
-        return res.send('lmao')
+        return res.status(403).send('lmao')
     }
 }
