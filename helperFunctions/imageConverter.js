@@ -1,5 +1,5 @@
 import crypto from 'crypto'
-import { storage } from './firebase.js';
+import { storage } from '../firebase.js'
 import { ref, uploadString, getDownloadURL } from "firebase/storage";
 export const imgConverter = async (img, imgname) => {
     if (imgname === undefined) {
